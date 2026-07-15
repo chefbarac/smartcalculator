@@ -236,5 +236,29 @@ total - 500&#10;(type a line, press Enter — it fills in the answer after =)"
                 ta.setSelectionRange(ta.value.length, ta.value.length);
             })();
         </script>
+        <script>
+            if ("serviceWorker" in navigator) {
+                window.addEventListener("load", () => {
+                    // Hash this page's own HTML so cache version tracks content automatically.
+                    /*  const html = document.documentElement.outerHTML;
+            const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(html));
+            const hash = [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 10);
+
+            navigator.serviceWorker.register(`./service-worker.js?v=${hash}`); */
+
+                    navigator.serviceWorker.register("sw.js").catch((err) => {
+                        console.error("SW registration failed:", err);
+                    });
+                });
+
+                // Auto-refresh once when a new SW version takes control.
+                let refreshing = false;
+                navigator.serviceWorker.addEventListener("controllerchange", () => {
+                    if (refreshing) return;
+                    refreshing = true;
+                    window.location.reload();
+                });
+            }
+        </script>
     </body>
 </html>

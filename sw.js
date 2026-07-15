@@ -1,8 +1,6 @@
 const PREFIX = 'smartcalculator-cache';
-const CACHE_NAME = PREFIX + '-v1.0.1';
+const CACHE_NAME = PREFIX + '-v1.0.2'; // bump this on every deploy to force refresh
 
-// Optional: pre-cache a few known static assets on install.
-// Not required for SWR to work — it'll cache things on first fetch anyway.
 const PRECACHE_URLS = [
     './',
     './index.html',
@@ -25,43 +23,32 @@ self.addEventListener('activate', (event) => {
                     .filter((key) => key.startsWith(PREFIX) && key !== CACHE_NAME)
                     .map((key) => caches.delete(key))
             )
-        )
+        ).then(() => self.clients.claim())
     );
-    self.clients.claim();
 });
 
 self.addEventListener('fetch', (event) => {
     const { request } = event;
 
-    // Only handle GET requests; let everything else pass through.
     if (request.method !== 'GET') return;
 
-    // Skip cross-origin requests (e.g. third-party APIs) if you want them
-    // to always hit the network. Remove this check to cache everything.
     const url = new URL(request.url);
     if (url.origin !== self.location.origin) return;
 
-    event.respondWith(staleWhileRevalidate(request));
+    event.respondWith(cacheFirst(request));
 });
 
-async function staleWhileRevalidate(request) {
+async function cacheFirst(request) {
     const cache = await caches.open(CACHE_NAME);
     const cachedResponse = await cache.match(request);
 
-    const networkFetch = fetch(request)
-        .then((networkResponse) => {
-            // Only cache valid, basic (same-origin) responses.
-            if (networkResponse && networkResponse.status === 200) {
-                cache.put(request, networkResponse.clone());
-            }
-            return networkResponse;
-        })
-        .catch(() => {
-            // Network failed — fall back to cache if we have it, else rethrow.
-            if (cachedResponse) return cachedResponse;
-            throw new Error('Network request failed and no cache available');
-        });
+    // Have it cached — serve it, no network call at all.
+    if (cachedResponse) return cachedResponse;
 
-    // Return cached response immediately if present, otherwise wait on network.
-    return cachedResponse || networkFetch;
+    // Not cached yet — fetch from network and cache for next time.
+    const networkResponse = await fetch(request);
+    if (networkResponse && networkResponse.status === 200) {
+        cache.put(request, networkResponse.clone());
+    }
+    return networkResponse;
 }
