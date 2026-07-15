@@ -3,7 +3,8 @@
     <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no" />
-        <title>Running Total Calculator</title>
+        <link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">🧮</text></svg>' />
+        <title>Smart Calculator</title>
         <style>
             :root {
                 --bg: #faf9f6;
@@ -193,6 +194,15 @@ total - 500&#10;(type a line, press Enter — it fills in the answer after =)"
                 ta.focus();
                 ta.setSelectionRange(ta.value.length, ta.value.length);
             })();
+        </script>
+        <script>
+            if ("serviceWorker" in navigator) {
+                window.addEventListener("load", () => {
+                    navigator.serviceWorker.register("sw.js").catch((err) => {
+                        console.error("SW registration failed:", err);
+                    });
+                });
+            }
         </script>
     </body>
 </html>
