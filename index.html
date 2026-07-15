@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no" />
+        <title>Running Total Calculator</title>
+        <style>
+            :root {
+                --bg: #faf9f6;
+                --ink: #1e1e1e;
+                --ink-dim: #8a8a82;
+                --line: #e4e2da;
+                --accent: #b5432b;
+                --mono: "SFMono-Regular", "IBM Plex Mono", Menlo, Consolas, monospace;
+            }
+            * {
+                box-sizing: border-box;
+            }
+            html,
+            body {
+                margin: 0;
+                padding: 0;
+                height: 100%;
+                background: var(--bg);
+                color: var(--ink);
+                font-family: var(--mono);
+            }
+            body {
+                display: flex;
+                flex-direction: column;
+            }
+            .totalbar {
+                display: flex;
+                align-items: baseline;
+                justify-content: space-between;
+                padding: 14px 20px;
+                border-bottom: 1px solid var(--line);
+                background: var(--bg);
+            }
+            .totalbar .label {
+                font-size: 11px;
+                letter-spacing: 0.14em;
+                text-transform: uppercase;
+                color: var(--ink-dim);
+            }
+            .totalbar .amount {
+                font-size: 22px;
+                font-weight: 600;
+                color: var(--accent);
+            }
+            textarea {
+                flex: 1;
+                width: 100%;
+                border: none;
+                outline: none;
+                resize: none;
+                background: var(--bg);
+                color: var(--ink);
+                font-family: var(--mono);
+                font-size: 15px;
+                line-height: 1.9em;
+                padding: 16px 20px 40px;
+            }
+            textarea::placeholder {
+                color: #bdbaad;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="totalbar">
+            <span class="label">Running total</span>
+            <span class="amount" id="total">&#8369;0.00</span>
+        </div>
+
+        <textarea
+            id="tape"
+            autofocus
+            spellcheck="false"
+            placeholder="50*3
+20*2
+5
+total - 500&#10;(type a line, press Enter — it fills in the answer after =)"
+        ></textarea>
+
+        <script>
+            (function () {
+                "use strict";
+                const ta = document.getElementById("tape");
+                const totalEl = document.getElementById("total");
+                const STORAGE_KEY = "plainTapeCalc.v1";
+
+                function fmt(n) {
+                    return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                }
+
+                // find every line ending in "= <number>" -> {index, value}
+                function scanResults(text) {
+                    const arr = text.split("\n");
+                    const out = [];
+                    arr.forEach((ln, i) => {
+                        const m = ln.match(/=\s*(-?\d+(?:\.\d+)?)\s*$/);
+                        if (m) out.push({ index: i, value: parseFloat(m[1]) });
+                    });
+                    return out;
+                }
+
+                function grandTotal(text) {
+                    return scanResults(text).reduce((s, r) => s + r.value, 0);
+                }
+
+                function updateTotal() {
+                    totalEl.textContent = "\u20B1" + fmt(grandTotal(ta.value));
+                }
+
+                function evaluate(expr, ansVal, totalVal) {
+                    let e = expr;
+                    e = e.replace(/\bans\b/gi, "(" + ansVal + ")");
+                    e = e.replace(/\btotal\b/gi, "(" + totalVal + ")");
+                    e = e.replace(/[x\u00d7]/gi, "*").replace(/[\u00f7]/g, "/");
+                    e = e.replace(/(\d+(?:\.\d+)?)%/g, "($1/100)");
+                    if (!/^[0-9+\-*/().\s]*$/.test(e)) throw new Error("bad chars");
+                    if (!/\d/.test(e)) throw new Error("no digits");
+                    // eslint-disable-next-line no-new-func
+                    const result = Function('"use strict"; return (' + e + ");")();
+                    if (typeof result !== "number" || !isFinite(result)) throw new Error("not finite");
+                    return Math.round(result * 100) / 100;
+                }
+
+                // format the line the cursor is leaving: fill in / refresh "= result"
+                function processLine(line, lineIndex, fullTextBefore) {
+                    const eqPos = line.indexOf("=");
+                    const exprPart = (eqPos === -1 ? line : line.slice(0, eqPos)).trim();
+                    if (!exprPart) return line; // blank or bare "=" line, leave untouched
+
+                    const results = scanResults(fullTextBefore);
+                    const before = results.filter((r) => r.index < lineIndex);
+                    const ansVal = before.length ? before[before.length - 1].value : 0;
+                    const totalVal = before.reduce((s, r) => s + r.value, 0);
+
+                    try {
+                        const result = evaluate(exprPart, ansVal, totalVal);
+                        return exprPart + " = " + fmt(result);
+                    } catch (e) {
+                        return line; // not a valid expression (e.g. a plain note) — leave as typed
+                    }
+                }
+
+                ta.addEventListener("keydown", function (e) {
+                    if (e.key !== "Enter") return;
+                    e.preventDefault();
+
+                    const value = ta.value;
+                    const pos = ta.selectionStart;
+                    const lineStart = value.lastIndexOf("\n", pos - 1) + 1;
+                    let lineEnd = value.indexOf("\n", pos);
+                    if (lineEnd === -1) lineEnd = value.length;
+
+                    const line = value.slice(lineStart, lineEnd);
+                    const lineIndex = value.slice(0, lineStart).split("\n").length - 1;
+                    const newLine = processLine(line, lineIndex, value.slice(0, lineStart));
+
+                    const rest = value[lineEnd] === "\n" ? value.slice(lineEnd + 1) : value.slice(lineEnd);
+                    const newValue = value.slice(0, lineStart) + newLine + "\n" + rest;
+                    const newCursor = lineStart + newLine.length + 1;
+
+                    ta.value = newValue;
+                    ta.setSelectionRange(newCursor, newCursor);
+                    updateTotal();
+                    save();
+                });
+
+                ta.addEventListener("input", function () {
+                    updateTotal();
+                    save();
+                });
+
+                function save() {
+                    try {
+                        localStorage.setItem(STORAGE_KEY, ta.value);
+                    } catch (e) {}
+                }
+                function load() {
+                    try {
+                        const v = localStorage.getItem(STORAGE_KEY);
+                        if (v) {
+                            ta.value = v;
+                        }
+                    } catch (e) {}
+                }
+
+                load();
+                updateTotal();
+                ta.focus();
+                ta.setSelectionRange(ta.value.length, ta.value.length);
+            })();
+        </script>
+    </body>
+</html>
