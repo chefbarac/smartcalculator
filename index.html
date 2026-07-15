@@ -12,10 +12,10 @@
 
             gtag("config", "G-HVQK00SXCM");
         </script>
+        <link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">🧮</text></svg>' />
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no" />
-        <link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">🧮</text></svg>' />
-        <title>Smart Calculator</title>
+        <title>Running Total Calculator</title>
         <style>
             :root {
                 --bg: #faf9f6;
@@ -60,6 +60,25 @@
                 font-weight: 600;
                 color: var(--accent);
             }
+            .totalbar .right {
+                display: flex;
+                align-items: baseline;
+                gap: 14px;
+            }
+            .clearbtn {
+                border: none;
+                background: none;
+                cursor: pointer;
+                font-family: var(--mono);
+                font-size: 11px;
+                letter-spacing: 0.1em;
+                text-transform: uppercase;
+                color: var(--ink-dim);
+                padding: 4px 2px;
+            }
+            .clearbtn:hover {
+                color: var(--accent);
+            }
             textarea {
                 flex: 1;
                 width: 100%;
@@ -81,7 +100,10 @@
     <body>
         <div class="totalbar">
             <span class="label">Running total</span>
-            <span class="amount" id="total">&#8369;0.00</span>
+            <div class="right">
+                <span class="amount" id="total">&#8369;0.00</span>
+                <button class="clearbtn" id="clearBtn" type="button">Clear</button>
+            </div>
         </div>
 
         <textarea
@@ -200,20 +222,19 @@ total - 500&#10;(type a line, press Enter — it fills in the answer after =)"
                     } catch (e) {}
                 }
 
+                document.getElementById("clearBtn").addEventListener("click", function () {
+                    // if (ta.value.trim() && !confirm("Clear the whole tape?")) return;
+                    ta.value = "";
+                    updateTotal();
+                    save();
+                    ta.focus();
+                });
+
                 load();
                 updateTotal();
                 ta.focus();
                 ta.setSelectionRange(ta.value.length, ta.value.length);
             })();
-        </script>
-        <script>
-            if ("serviceWorker" in navigator) {
-                window.addEventListener("load", () => {
-                    navigator.serviceWorker.register("sw.js").catch((err) => {
-                        console.error("SW registration failed:", err);
-                    });
-                });
-            }
         </script>
     </body>
 </html>
