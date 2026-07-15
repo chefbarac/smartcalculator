@@ -1,5 +1,5 @@
 const PREFIX = 'smartcalculator-cache';
-const CACHE_NAME = PREFIX + '-v1';
+const CACHE_NAME = PREFIX + '-v1.0.1';
 
 // Optional: pre-cache a few known static assets on install.
 // Not required for SWR to work — it'll cache things on first fetch anyway.
