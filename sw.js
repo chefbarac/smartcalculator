@@ -1,7 +1,7 @@
 const PREFIX = 'smartcalculator-cache';
 // const params = new URLSearchParams(self.location.search);
 // const CACHE_NAME = PREFIX + '-' + (params.get('v') || 'dev');
-const CACHE_NAME = PREFIX + '-v1.0.3'; // bump this on every deploy to force refresh
+const CACHE_NAME = PREFIX + '-v1.0.4'; // bump this on every deploy to force refresh
 
 const PRECACHE_URLS = [
     './',
@@ -33,8 +33,8 @@ self.addEventListener('fetch', (event) => {
 
     if (request.method !== 'GET') return;
 
-    const url = new URL(request.url);
-    if (url.origin !== self.location.origin) return;
+    // const url = new URL(request.url);
+    // if (url.origin !== self.location.origin) return;
 
     event.respondWith(cacheFirst(request));
 });
