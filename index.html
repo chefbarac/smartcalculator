@@ -224,7 +224,7 @@ total - 500&#10;(type a line, press Enter — it fills in the answer after =)"
                 }
 
                 document.getElementById("clearBtn").addEventListener("click", function () {
-                    if (ta.value.trim() && !confirm("Clear the whole tape?")) return;
+                    // if (ta.value.trim() && !confirm("Clear the whole tape?")) return;
                     ta.value = "";
                     updateTotal();
                     save();

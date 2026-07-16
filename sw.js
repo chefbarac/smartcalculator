@@ -1,7 +1,7 @@
 const PREFIX = 'smartcalculator-cache';
 // const params = new URLSearchParams(self.location.search);
 // const CACHE_NAME = PREFIX + '-' + (params.get('v') || 'dev');
-const CACHE_NAME = PREFIX + '-v1.0.4'; // bump this on every deploy to force refresh
+const CACHE_NAME = PREFIX + '-v1.0.5'; // bump this on every deploy to force refresh
 
 const PRECACHE_URLS = [
     './',
