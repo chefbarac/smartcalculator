@@ -223,6 +223,51 @@ total - 500&#10;(type a line, press Enter — it fills in the answer after =)"
                     save();
                 });
 
+                ta.addEventListener("paste", function (e) {
+                    const clip = e.clipboardData || window.clipboardData;
+                    if (!clip) return; // let default paste happen if we can't read it
+                    const text = clip.getData("text");
+                    if (!text) return;
+                    e.preventDefault();
+
+                    const value = ta.value;
+                    const start = ta.selectionStart;
+                    const end = ta.selectionEnd;
+                    const before = value.slice(0, start);
+                    const after = value.slice(end);
+
+                    // split the current line around the cursor so pasted text merges into it
+                    const lineStart = before.lastIndexOf("\n") + 1;
+                    const prefixOnLine = before.slice(lineStart);
+                    const nlInAfter = after.indexOf("\n");
+                    const suffixOnLine = nlInAfter === -1 ? after : after.slice(0, nlInAfter);
+                    const restAfter = nlInAfter === -1 ? "" : after.slice(nlInAfter);
+
+                    const pastedLines = text.split(/\r\n|\r|\n/);
+                    pastedLines[0] = prefixOnLine + pastedLines[0];
+                    pastedLines[pastedLines.length - 1] = pastedLines[pastedLines.length - 1] + suffixOnLine;
+
+                    const textBeforeBlock = before.slice(0, lineStart);
+                    let accumulator = textBeforeBlock;
+                    let lineIndex = textBeforeBlock.split("\n").length - 1;
+                    const outLines = [];
+                    for (const rawLine of pastedLines) {
+                        const processed = processLine(rawLine, lineIndex, accumulator);
+                        outLines.push(processed);
+                        accumulator += processed + "\n";
+                        lineIndex++;
+                    }
+
+                    const pastedBlock = outLines.join("\n");
+                    const newValue = textBeforeBlock + pastedBlock + restAfter;
+                    const newCursor = textBeforeBlock.length + pastedBlock.length;
+
+                    ta.value = newValue;
+                    ta.setSelectionRange(newCursor, newCursor);
+                    updateTotal();
+                    save();
+                });
+
                 ta.addEventListener("input", function () {
                     updateTotal();
                     save();
