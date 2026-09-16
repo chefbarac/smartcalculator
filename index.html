@@ -94,19 +94,6 @@
             .clearbtn:hover {
                 color: var(--accent);
             }
-            .processing {
-                display: flex;
-                align-items: baseline;
-                gap: 10px;
-                font-size: 11px;
-                letter-spacing: 0.1em;
-                text-transform: uppercase;
-                color: var(--ink-dim);
-            }
-            .processing .dots {
-                display: inline-block;
-                animation: pulse 1s ease-in-out infinite;
-            }
             @keyframes pulse {
                 0%,
                 100% {
@@ -116,19 +103,26 @@
                     opacity: 1;
                 }
             }
-            .cancelbtn {
-                border: none;
+            .modebtn {
+                border: 1px solid var(--line);
+                border-radius: 20px;
                 background: none;
                 cursor: pointer;
                 font-family: var(--mono);
                 font-size: 11px;
-                letter-spacing: 0.1em;
+                letter-spacing: 0.08em;
                 text-transform: uppercase;
-                color: var(--accent);
-                padding: 4px 2px;
+                color: var(--ink-dim);
+                padding: 4px 10px;
             }
-            .cancelbtn:hover {
-                text-decoration: underline;
+            .modebtn:hover {
+                color: var(--ink);
+                border-color: var(--ink-dim);
+            }
+            .modebtn.active {
+                background: var(--accent);
+                border-color: var(--accent);
+                color: #fff;
             }
             textarea {
                 flex: 1;
@@ -147,6 +141,36 @@
             textarea::placeholder {
                 color: #bdbaad;
             }
+            .overlay {
+                position: fixed;
+                inset: 0;
+                background: rgba(250, 249, 246, 0.94);
+                display: none;
+                align-items: center;
+                justify-content: center;
+                z-index: 1000;
+                text-align: center;
+                padding: 20px;
+                cursor: wait;
+            }
+            .overlay .msg {
+                font-size: 12px;
+                letter-spacing: 0.12em;
+                text-transform: uppercase;
+                color: var(--ink-dim);
+            }
+            .overlay .dots {
+                display: inline-block;
+                animation: pulse 1s ease-in-out infinite;
+            }
+            .overlay .hint {
+                display: block;
+                margin-top: 12px;
+                font-size: 11px;
+                letter-spacing: normal;
+                text-transform: none;
+                color: var(--ink-dim);
+            }
         </style>
     </head>
     <body>
@@ -155,10 +179,7 @@
             <div class="totalbar">
                 <span class="label">Running total</span>
                 <div class="right">
-                    <span class="processing" id="processing" style="display: none">
-                        <span><span class="dots">&#9679;</span> Processing&nbsp;<span id="processingCount"></span></span>
-                        <button class="cancelbtn" id="cancelBtn" type="button">Cancel</button>
-                    </span>
+                    <button class="modebtn" id="modeBtn" type="button" title="Add-only mode: each line is evaluated on its own, ignoring ans/total. Faster for big pastes, order doesn't matter.">+ only</button>
                     <span class="amount" id="total">&#8369;0.00</span>
                     <button class="clearbtn" id="clearBtn" type="button">Clear</button>
                 </div>
@@ -175,25 +196,51 @@ total - 500&#10;(type a line, press Enter — it fills in the answer after =)"
             ></textarea>
         </div>
 
+        <div class="overlay" id="overlay">
+            <div class="msg">
+                <span><span class="dots">&#9679;</span> Processing&nbsp;<span id="overlayCount"></span></span>
+                <span class="hint">Taking too long? You can refresh the page.</span>
+            </div>
+        </div>
+
         <script>
             (function () {
                 "use strict";
                 const ta = document.getElementById("tape");
                 const totalEl = document.getElementById("total");
-                const processingEl = document.getElementById("processing");
-                const processingCountEl = document.getElementById("processingCount");
-                const cancelBtn = document.getElementById("cancelBtn");
+                const modeBtn = document.getElementById("modeBtn");
+                const overlay = document.getElementById("overlay");
+                const overlayCountEl = document.getElementById("overlayCount");
                 const STORAGE_KEY = "plainTapeCalc.v1";
+                const MODE_KEY = "plainTapeCalc.v1.addOnly";
 
-                let currentJob = null; // in-flight background paste-processing job, if any
+                // Add-only mode: lines are evaluated independently (no ans/total lookback).
+                // Order stops mattering, and there's no need to rescan prior lines at all —
+                // which is what makes big pastes (thousands of lines) fast.
+                let addOnlyMode = false;
+                try {
+                    addOnlyMode = localStorage.getItem(MODE_KEY) === "1";
+                } catch (e) {}
 
-                function showProcessing(done, total) {
-                    processingEl.style.display = "flex";
-                    processingCountEl.textContent = total ? done + " / " + total : "";
+                function applyModeUI() {
+                    modeBtn.classList.toggle("active", addOnlyMode);
                 }
-                function hideProcessing() {
-                    processingEl.style.display = "none";
-                    processingCountEl.textContent = "";
+                modeBtn.addEventListener("click", function () {
+                    addOnlyMode = !addOnlyMode;
+                    applyModeUI();
+                    try {
+                        localStorage.setItem(MODE_KEY, addOnlyMode ? "1" : "0");
+                    } catch (e) {}
+                });
+                applyModeUI();
+
+                function showOverlay(total) {
+                    overlayCountEl.textContent = total ? "(" + total + " lines)" : "";
+                    overlay.style.display = "flex";
+                }
+                function hideOverlay() {
+                    overlay.style.display = "none";
+                    overlayCountEl.textContent = "";
                 }
 
                 function fmt(n) {
@@ -219,11 +266,15 @@ total - 500&#10;(type a line, press Enter — it fills in the answer after =)"
                     totalEl.textContent = "\u20B1" + fmt(grandTotal(ta.value));
                 }
 
-                function evaluate(expr, ansVal, totalVal) {
+                function evaluate(expr, ansVal, totalVal, addOnly) {
                     let e = expr;
                     e = e.replace(/(\d),(?=\d)/g, "$1"); // strip thousands-separator commas
-                    e = e.replace(/\bans\b/gi, "(" + ansVal + ")");
-                    e = e.replace(/\btotal\b/gi, "(" + totalVal + ")");
+                    if (!addOnly) {
+                        e = e.replace(/\bans\b/gi, "(" + ansVal + ")");
+                        e = e.replace(/\btotal\b/gi, "(" + totalVal + ")");
+                    }
+                    // in add-only mode, "ans"/"total" are left as literal letters, which will
+                    // fail the char-whitelist check below and fall back to "leave line as typed"
                     e = e.replace(/[x\u00d7]/gi, "*").replace(/[\u00f7]/g, "/");
                     e = e.replace(/(\d+(?:\.\d+)?)%/g, "($1/100)");
                     if (!/^[0-9+\-*/().\s]*$/.test(e)) throw new Error("bad chars");
@@ -240,13 +291,17 @@ total - 500&#10;(type a line, press Enter — it fills in the answer after =)"
                     const exprPart = (eqPos === -1 ? line : line.slice(0, eqPos)).trim();
                     if (!exprPart) return line; // blank or bare "=" line, leave untouched
 
-                    const results = scanResults(fullTextBefore);
-                    const before = results.filter((r) => r.index < lineIndex);
-                    const ansVal = before.length ? before[before.length - 1].value : 0;
-                    const totalVal = before.reduce((s, r) => s + r.value, 0);
+                    let ansVal = 0,
+                        totalVal = 0;
+                    if (!addOnlyMode) {
+                        const results = scanResults(fullTextBefore);
+                        const before = results.filter((r) => r.index < lineIndex);
+                        ansVal = before.length ? before[before.length - 1].value : 0;
+                        totalVal = before.reduce((s, r) => s + r.value, 0);
+                    }
 
                     try {
-                        const result = evaluate(exprPart, ansVal, totalVal);
+                        const result = evaluate(exprPart, ansVal, totalVal, addOnlyMode);
                         return exprPart + " = " + fmt(result);
                     } catch (e) {
                         return line; // not a valid expression (e.g. a plain note) — leave as typed
@@ -256,7 +311,6 @@ total - 500&#10;(type a line, press Enter — it fills in the answer after =)"
                 ta.addEventListener("keydown", function (e) {
                     if (e.key !== "Enter") return;
                     e.preventDefault();
-                    if (currentJob) cancelCurrentJob();
 
                     const value = ta.value;
                     const pos = ta.selectionStart;
@@ -278,22 +332,12 @@ total - 500&#10;(type a line, press Enter — it fills in the answer after =)"
                     save();
                 });
 
-                const PASTE_CHUNK_SIZE = 30; // lines processed per tick before yielding back to the UI thread
-
-                function cancelCurrentJob() {
-                    if (currentJob) currentJob.cancelled = true;
-                    currentJob = null;
-                    hideProcessing();
-                }
-
                 ta.addEventListener("paste", function (e) {
                     const clip = e.clipboardData || window.clipboardData;
                     if (!clip) return; // let default paste happen if we can't read it
                     const text = clip.getData("text");
                     if (!text) return;
                     e.preventDefault();
-
-                    cancelCurrentJob(); // a fresh paste supersedes any job still running
 
                     const value = ta.value;
                     const start = ta.selectionStart;
@@ -333,36 +377,53 @@ total - 500&#10;(type a line, press Enter — it fills in the answer after =)"
                         return;
                     }
 
-                    const job = { cancelled: false };
-                    currentJob = job;
-
                     const total = pastedLines.length;
-                    let i = 0;
-                    let accumulator = textBeforeBlock;
-                    let lineIndex = textBeforeBlock.split("\n").length - 1;
-                    const outLines = [];
+                    showOverlay(total);
 
-                    showProcessing(0, total);
+                    // Yield one tick so the browser actually paints the overlay before the
+                    // (possibly long, fully synchronous) loop below blocks the main thread.
+                    // Big pastes will freeze the page for that duration — the overlay is there
+                    // so it reads as "working", not "broken" — and the hint tells people they
+                    // can just refresh if it's taking too long.
+                    setTimeout(function () {
+                        const outLines = [];
 
-                    function step() {
-                        if (job.cancelled) return; // cancelled or superseded — leave the raw text as-is
+                        // Running state instead of rescanning all prior lines on every iteration
+                        // (that rescan made big pastes O(n^2)). In add-only mode these are unused,
+                        // since each line is evaluated independently of the others.
+                        let ansVal = 0,
+                            totalVal = 0;
+                        if (!addOnlyMode) {
+                            const priorResults = scanResults(textBeforeBlock);
+                            ansVal = priorResults.length ? priorResults[priorResults.length - 1].value : 0;
+                            totalVal = priorResults.reduce((s, r) => s + r.value, 0);
+                        }
 
-                        const chunkEnd = Math.min(i + PASTE_CHUNK_SIZE, total);
-                        for (; i < chunkEnd; i++) {
-                            const processed = processLine(pastedLines[i], lineIndex, accumulator);
+                        for (let i = 0; i < total; i++) {
+                            const rawLine = pastedLines[i];
+                            const eqPos = rawLine.indexOf("=");
+                            const exprPart = (eqPos === -1 ? rawLine : rawLine.slice(0, eqPos)).trim();
+
+                            let processed;
+                            if (!exprPart) {
+                                processed = rawLine; // blank or bare "=" line, leave untouched
+                            } else {
+                                try {
+                                    const result = evaluate(exprPart, ansVal, totalVal, addOnlyMode);
+                                    processed = exprPart + " = " + fmt(result);
+                                    if (!addOnlyMode) {
+                                        ansVal = result;
+                                        totalVal += result;
+                                    }
+                                } catch (e) {
+                                    processed = rawLine; // not a valid expression — leave as typed
+                                }
+                            }
                             outLines.push(processed);
-                            accumulator += processed + "\n";
-                            lineIndex++;
-                        }
-                        showProcessing(i, total);
-
-                        if (i < total) {
-                            setTimeout(step, 0); // yield to the event loop so the UI stays responsive
-                            return;
                         }
 
-                        // finished — only apply if nothing else has touched the tape meanwhile
-                        if (!job.cancelled && ta.value === rawValue) {
+                        // only apply if nothing else has touched the tape meanwhile
+                        if (ta.value === rawValue) {
                             const pastedBlock = outLines.join("\n");
                             const finalValue = textBeforeBlock + pastedBlock + restAfter;
                             ta.value = finalValue;
@@ -373,20 +434,11 @@ total - 500&#10;(type a line, press Enter — it fills in the answer after =)"
                             updateTotal();
                             save();
                         }
-                        hideProcessing();
-                        if (currentJob === job) currentJob = null;
-                    }
-                    step();
-                });
-
-                cancelBtn.addEventListener("click", function () {
-                    cancelCurrentJob();
-                    ta.focus();
+                        hideOverlay();
+                    }, 30);
                 });
 
                 ta.addEventListener("input", function () {
-                    // any manual edit invalidates an in-flight background paste job
-                    if (currentJob) cancelCurrentJob();
                     updateTotal();
                     save();
                 });
@@ -407,7 +459,6 @@ total - 500&#10;(type a line, press Enter — it fills in the answer after =)"
 
                 document.getElementById("clearBtn").addEventListener("click", function () {
                     // if (ta.value.trim() && !confirm("Clear the whole tape?")) return;
-                    if (currentJob) cancelCurrentJob();
                     ta.value = "";
                     updateTotal();
                     save();
